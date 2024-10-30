@@ -97,17 +97,21 @@ pub fn design_primers(changes: Vec<(u32, String)>, sequence: &str) -> (String, S
     let mut start = (changes.iter().map(|(num, _)| num).min().unwrap() * 3) as usize;
     let mut end = (changes.iter().map(|(num, _)| num).max().unwrap() * 3 + 3) as usize;
 
+    let mut start_turn = true;
+
     while end - start < 25 || {
         let pmis = percent_mismatch(&sequence[start..end], &new_sequence[start..end]);
         let pgc = percent_gc(&new_sequence[start..end]);
         let tm = 81.5 + 0.41 * pgc - 675.0 / (end - start) as f32 - pmis;
         tm < 78.0
     } {
-        if start > 0 {
+        if start > 0 && start_turn{
             start -= 1;
+            start_turn = false;
         }
-        if end < new_sequence.len() {
+        else if end < new_sequence.len() {
             end += 1;
+            start_turn = true;
         }
     }
 
