@@ -17,5 +17,4 @@ fn main() {
     let (btm, top) = utils::design_primers(mutations, &sequence);
 
     println!("top: {}\nbtm: {}", top, btm);
-  
 }
