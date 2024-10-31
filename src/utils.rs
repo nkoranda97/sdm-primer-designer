@@ -1,7 +1,36 @@
+use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::io::stdin;
 
-pub fn print_translation(translation: String) {
+lazy_static! {
+    static ref CODON_TABLE: HashMap<&'static str, &'static str> = {
+        let mut m = HashMap::new();
+        m.insert("F", "TTT");
+        m.insert("L", "CTG");
+        m.insert("S", "AGC");
+        m.insert("Y", "TAC");
+        m.insert("*", "TGA");
+        m.insert("C", "TGC");
+        m.insert("W", "TGG");
+        m.insert("P", "CCG");
+        m.insert("H", "CAC");
+        m.insert("Q", "CAG");
+        m.insert("R", "CGG");
+        m.insert("I", "ATC");
+        m.insert("M", "ATG");
+        m.insert("T", "ACC");
+        m.insert("N", "AAC");
+        m.insert("K", "AAG");
+        m.insert("V", "GTG");
+        m.insert("A", "GCC");
+        m.insert("D", "GAC");
+        m.insert("E", "GAG");
+        m.insert("G", "GGC");
+        m
+    };
+}
+
+pub fn print_translation(translation: &str) {
     let mut printed: String = String::new();
     for (i, c) in translation.chars().enumerate() {
         if i % 10 == 0 && i > 0 {
@@ -96,65 +125,66 @@ pub fn translate(sequence: &str) -> String {
     translation
 }
 
-pub fn read_mutations() -> Vec<(u32, String)> {
+pub fn read_mutations(limit: u32, seq_len: usize) -> Vec<(u32, String)> {
     let mut changes = Vec::new();
     println!(
         "Enter the position, space, and the amino acid to mutate to (or type 'end' to finish)"
     );
 
-    let mut i = 1;
-    loop {
-        let mut input = String::new();
-        println!("Mutation {}:", i);
-        stdin().read_line(&mut input).expect("Failed to read line");
+    let mut end_flag = false; // Flag to indicate if "end" was typed
 
-        let input = input.trim();
-        if input == "end" {
-            break;
+    for i in 0..limit {
+        if end_flag {
+            break; // Break out of the outer loop if "end" was typed
         }
-        let input: Vec<&str> = input.split_whitespace().collect();
-        if let Ok(num) = input[0].parse::<u32>() {
-            let aa = input[1].to_string();
-            changes.push((num - 1, aa));
-            i += 1;
+
+        loop {
+            let mut input = String::new();
+            println!("Mutation {}:", i + 1);
+            stdin().read_line(&mut input).expect("Failed to read line");
+
+            let input = input.trim();
+            if input == "end" {
+                end_flag = true; // Set the flag to true
+                break; // Break out of the inner loop
+            }
+            let input: Vec<&str> = input.split_whitespace().collect();
+            if input.len() != 2 {
+                println!("Invalid input format. Please enter in the format 'num AA'.");
+                continue;
+            }
+            if let Ok(num) = input[0].parse::<u32>() {
+                if num == 0 || num > seq_len as u32 {
+                    println!(
+                        "Position out of range. Please enter a position between 1 and {}.",
+                        seq_len
+                    );
+                    continue;
+                }
+                let aa = input[1].to_string();
+                if !CODON_TABLE.contains_key(aa.as_str()) {
+                    println!("Invalid amino acid. Please enter a valid amino acid.");
+                    continue;
+                }
+                changes.push((num - 1, aa));
+                break; // Break out of the inner loop to proceed to the next mutation
+            } else {
+                println!("Invalid number format. Please enter a valid number.");
+            }
         }
     }
 
     changes
 }
 
-pub fn design_primers(changes: Vec<(u32, String)>, sequence: &str) -> (String, String) {
-    let codon_table: HashMap<&str, &str> = [
-        ("F", "TTT"),
-        ("L", "CTG"),
-        ("S", "AGC"),
-        ("Y", "TAC"),
-        ("*", "TGA"),
-        ("C", "TGC"),
-        ("W", "TGG"),
-        ("P", "CCG"),
-        ("H", "CAC"),
-        ("Q", "CAG"),
-        ("R", "CGG"),
-        ("I", "ATC"),
-        ("M", "ATG"),
-        ("T", "ACC"),
-        ("N", "AAC"),
-        ("K", "AAG"),
-        ("V", "GTG"),
-        ("A", "GCC"),
-        ("D", "GAC"),
-        ("E", "GAG"),
-        ("G", "GGC"),
-    ]
-    .iter()
-    .cloned()
-    .collect();
-
+pub fn design_primers(
+    changes: Vec<(u32, String)>,
+    sequence: &str,
+) -> Result<(String, String), String> {
     let mut new_sequence = sequence.to_string();
 
     for (num, aa) in &changes {
-        if let Some(codon) = codon_table.get(aa.as_str()) {
+        if let Some(codon) = CODON_TABLE.get(aa.as_str()) {
             let start = (num * 3) as usize;
             let end = start + 3;
             if end <= sequence.len() {
@@ -165,7 +195,7 @@ pub fn design_primers(changes: Vec<(u32, String)>, sequence: &str) -> (String, S
 
     let mut start = (changes.iter().map(|(num, _)| num).min().unwrap() * 3) as usize;
     let mut end = (changes.iter().map(|(num, _)| num).max().unwrap() * 3 + 3) as usize;
-
+    println!("{}", start);
     let mut start_turn = true;
 
     while end - start < 25 || {
@@ -177,16 +207,18 @@ pub fn design_primers(changes: Vec<(u32, String)>, sequence: &str) -> (String, S
         if start > 0 && start_turn {
             start -= 1;
             start_turn = false;
-        } else if end < new_sequence.len() {
+        } else if end < new_sequence.len() && !start_turn {
             end += 1;
             start_turn = true;
+        } else {
+            return Err("Desired mutation(s) is too close to the start or end. Please input new sequence with the intended mutation(s) centered.".to_string());
         }
     }
 
     let primer = new_sequence[start..end].to_string();
     let rev_comp = reverse_transcribe(&primer);
 
-    (rev_comp, primer)
+    Ok((rev_comp, primer))
 }
 
 fn percent_mismatch(old_seq: &str, new_seq: &str) -> f32 {
