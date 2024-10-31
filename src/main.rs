@@ -4,7 +4,7 @@ use std::io::stdin;
 
 fn main() {
     let mut sequence = String::new();
-    println!("Input DNA Sequence 35 bp or larger");
+    println!("Input DNA Sequence 35 bp or larger in Frame");
     stdin()
         .read_line(&mut sequence)
         .expect("Failed to read line");
@@ -24,7 +24,7 @@ fn main() {
     let mutations = utils::read_mutations(limit, translation.len());
 
     match utils::design_primers(mutations, &sequence) {
-        Ok((top, btm)) => println!("Top: {}\nBottom: {}", top, btm),
+        Ok((top, btm)) => println!("Top: {}\nBtm: {}", top, btm),
         Err(e) => println!("Error: {}", e),
     }
 }
